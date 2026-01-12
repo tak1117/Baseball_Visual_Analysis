@@ -137,7 +137,7 @@ const DisparityAndAccuracyAnalysis = () => {
   };
 
   const calculateVisualAngle = (eyePos, ballPos) => {
-    const targetPos = [0.0, 18.44, 1.80];
+    const targetPos = [0.0, 18.44, 1.714];
     const camFwd = normalize(subVec(targetPos, eyePos));
     const worldUp = [0, 0, 1];
     const camRight = normalize(crossVec(camFwd, worldUp));
