@@ -1,12 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Activity, TrendingUp, Eye, AlertTriangle, BarChart2, Camera, MousePointer2, ArrowRightLeft, ArrowUpCircle } from 'lucide-react';
+import { Activity, TrendingUp, Eye, AlertTriangle, BarChart2, Camera, MousePointer2, ArrowRightLeft, ArrowUpCircle, User, Target } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 const DisparityAndAccuracyAnalysis = () => {
+  // ========================================
   // 基本設定
-  const [selectedPitch, setSelectedPitch] = useState('ohtani_ff');
+  // ========================================
+  const [selectedPitch, setSelectedPitch] = useState('FF');
   const [selectedTimeIdx, setSelectedTimeIdx] = useState(200);
+  
+  // ★ 新規追加: バッター身長とコース選択
+  const [batterHeight, setBatterHeight] = useState(170);
+  const [batterHeightInput, setBatterHeightInput] = useState('170');
+  const [heightError, setHeightError] = useState(null);
+  const [selectedCourse, setSelectedCourse] = useState('mid_mid');
   
   // グラフモード
   const [graphMode, setGraphMode] = useState('disparity');
@@ -16,30 +24,76 @@ const DisparityAndAccuracyAnalysis = () => {
   const [condition2, setCondition2] = useState({ stance: 'square', position: 'inner' });
 
   const [data, setData] = useState([]);
-  const [eyePositions, setEyePositions] = useState(null); // ★視点位置を保存
+  const [eyePositions, setEyePositions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const printRef = useRef(null);
 
+  // ========================================
   // 定数定義
-  const csvFiles = {
-    'ohtani_ff': './simulation_results_1_ohtani_ff_right.csv',
-    'ohtani_sweeper': './simulation_results_2_ohtani_sweeper_right.csv',
-    'kershaw_curve': './simulation_results_3_kershaw_curve_mirrorright.csv',
-    'may_sinker': './simulation_results_4_may_sinker_right.csv'
+  // ========================================
+  
+  // 身長の有効範囲
+  const HEIGHT_MIN = 160;
+  const HEIGHT_MAX = 200;
+  
+  // 球種定義（ファイル名と表示名）
+  const pitchTypes = {
+    'FF': { name: 'ストレート (FF)', fullName: 'Straight', color: '#E63946' },
+    'ST': { name: 'スイーパー (ST)', fullName: 'Sweeper', color: '#457B9D' },
+    'CU': { name: 'カーブ (CU)', fullName: 'Curve', color: '#9B59B6' },
+    'SI': { name: 'シンカー (SI)', fullName: 'Sinker', color: '#2A9D8F' }
+  };
+
+  // コース定義（ディレクトリ名と表示名）
+  const courseOptions = {
+    'high_in': { name: 'インコース高め', row: 0, col: 0 },
+    'high_mid': { name: '真ん中高め', row: 0, col: 1 },
+    'high_out': { name: 'アウトコース高め', row: 0, col: 2 },
+    'mid_in': { name: 'インコース真ん中', row: 1, col: 0 },
+    'mid_mid': { name: '真ん中', row: 1, col: 1 },
+    'mid_out': { name: 'アウトコース真ん中', row: 1, col: 2 },
+    'low_in': { name: 'インコース低め', row: 2, col: 0 },
+    'low_mid': { name: '真ん中低め', row: 2, col: 1 },
+    'low_out': { name: 'アウトコース低め', row: 2, col: 2 }
   };
 
   const STEREO_ACUITY_ARCSEC = 100; 
   const STEREO_ACUITY_RAD = (STEREO_ACUITY_ARCSEC / 3600) * (Math.PI / 180);
 
-  const boxPositions = { 'inner': [-0.45, 0.0, 1.65], 'middle': [-0.90, 0.0, 1.65] };
+  // 眼高計算の係数（AIST人体寸法データベースに基づく）
+  // 日本人成人男性: 平均身長171.4cm, 平均内眼角高159.6cm
+  const EYE_HEIGHT_RATIO = 159.6 / 171.4;
+
+  // 眼高を身長から動的に計算する関数
+  const calculateEyeHeight = (heightCm) => {
+    return (heightCm * EYE_HEIGHT_RATIO) / 100; // cm → m に変換
+  };
+
+  // 現在の身長に基づく眼高
+  const currentEyeHeight = calculateEyeHeight(batterHeight);
+
+  // 打席位置（眼高は動的に計算）
+  const getBoxPositions = (eyeHeight) => ({
+    'inner': [-0.45, 0.0, eyeHeight],
+    'middle': [-0.90, 0.0, eyeHeight]
+  });
+
+  const boxPositions = getBoxPositions(currentEyeHeight);
   const positionLabels = { 'inner': '内側', 'middle': '真ん中' };
   const stanceAngles = { 'open': 0, 'square': -30 };
   const stanceLabels = { 'open': 'Open', 'square': 'Square' };
 
   const timeTicks = [0, 100, 200, 300, 400, 500, 600];
   const errorTicks = [0, 500, 1000, 1500, 2000, 2500, 3000];
+
+  // ========================================
+  // CSVファイルパス生成
+  // ========================================
+  const getCSVPath = (height, course, pitch) => {
+    return `./public/${height}/${course}/${pitch}.csv`;
+  };
 
   const loadCSV = async (filepath) => {
     try {
@@ -100,25 +154,21 @@ const DisparityAndAccuracyAnalysis = () => {
     return Math.atan2(xLocal, zLocal) * 180 / Math.PI;
   };
 
-  // ★ 新規追加: コース変化と球筋（Trajectory Effect）の分解ロジック
-  // Pythonの decompose_course_and_trajectory に対応
+  // コース変化と球筋（Trajectory Effect）の分解ロジック
   const decomposeTrajectory = (fullData, currentIndex, eyePos) => {
     if (!fullData || fullData.length < 2 || currentIndex < 1) return null;
 
-    // 開始点 (index 0 or 1) と 終了点 (currentIndex)
     const startIdx = 0;
     const endIdx = currentIndex;
 
     const startPos = [fullData[startIdx].x_m, fullData[startIdx].y_m, fullData[startIdx].z_m];
     const endPos = [fullData[endIdx].x_m, fullData[endIdx].y_m, fullData[endIdx].z_m];
 
-    // カメラ座標系の構築 (Pythonコードと一致させる)
     const targetPos = [0.0, 18.44, 1.7];
     const camFwd = normalize(subVec(targetPos, eyePos));
     const worldUp = [0.0, 0.0, 1.0];
     const camRight = normalize(crossVec(camFwd, worldUp));
 
-    // 角度計算ヘルパー
     const getAngle = (pos) => {
       const vec = subVec(pos, eyePos);
       const zLocal = dotVec(vec, camFwd);
@@ -126,19 +176,13 @@ const DisparityAndAccuracyAnalysis = () => {
       return Math.atan2(xLocal, zLocal) * 180 / Math.PI;
     };
 
-    // 1. 実際の開始角度
     const angleStart = getAngle(startPos);
-
-    // 2. 仮想点 (Virtual Point): ボールが「横移動(X)」だけして「奥行き(Y)」が変わらなかった場合の座標
     const virtualPos = [endPos[0], startPos[1], startPos[2]];
     const angleVirtual = getAngle(virtualPos);
-
-    // 3. 実際の終了角度
     const angleEnd = getAngle(endPos);
 
-    // 4. 成分分解
-    const courseChange = Math.abs(angleVirtual - angleStart);      // 純粋なコース変化
-    const trajectoryEffect = Math.abs(angleVirtual - angleEnd);    // Y移動による見かけの変化
+    const courseChange = Math.abs(angleVirtual - angleStart);
+    const trajectoryEffect = Math.abs(angleVirtual - angleEnd);
     const totalChange = courseChange + trajectoryEffect;
 
     return {
@@ -152,13 +196,53 @@ const DisparityAndAccuracyAnalysis = () => {
     };
   };
 
+  // ========================================
+  // 身長入力のバリデーション
+  // ========================================
+  const handleHeightInputChange = (e) => {
+    const inputValue = e.target.value;
+    setBatterHeightInput(inputValue);
+    
+    // 空の場合はエラーを表示しない（入力中）
+    if (inputValue === '') {
+      setHeightError(null);
+      return;
+    }
+    
+    const value = parseInt(inputValue, 10);
+    
+    if (isNaN(value)) {
+      setHeightError('数値を入力してください');
+    } else if (value < HEIGHT_MIN || value > HEIGHT_MAX) {
+      setHeightError(`対象外の身長です（${HEIGHT_MIN}〜${HEIGHT_MAX}cmの範囲で入力してください）`);
+    } else {
+      setHeightError(null);
+      setBatterHeight(value);
+    }
+  };
+
+  const handleHeightBlur = () => {
+    // フォーカスが外れたときに有効な値に戻す
+    if (heightError || batterHeightInput === '') {
+      setBatterHeightInput(batterHeight.toString());
+      setHeightError(null);
+    }
+  };
+
+  // ========================================
+  // データ読み込み・計算
+  // ========================================
   useEffect(() => {
     const loadAndCalculate = async () => {
+      // 身長エラーがある場合は読み込まない
+      if (heightError) return;
+      
       setLoading(true);
       setError(null);
       
       try {
-        const csvData = await loadCSV(csvFiles[selectedPitch]);
+        const csvPath = getCSVPath(batterHeight, selectedCourse, selectedPitch);
+        const csvData = await loadCSV(csvPath);
         
         const safeC1Pos = boxPositions[condition1.position] ? condition1.position : 'inner';
         const safeC1Stance = stanceAngles[condition1.stance] !== undefined ? condition1.stance : 'open';
@@ -174,7 +258,6 @@ const DisparityAndAccuracyAnalysis = () => {
         const c2Angle = stanceAngles[safeC2Stance];
         const c2EyesCalc = calculateEyePositions(c2Angle, c2Head);
         
-        // ★視点位置をStateに保存（分解計算用）
         setEyePositions({ c1: c1EyesCalc, c2: c2EyesCalc });
 
         const results = csvData.map(row => {
@@ -197,14 +280,14 @@ const DisparityAndAccuracyAnalysis = () => {
           return {
             time_s: row.time_s,
             time_ms: row.time_s * 1000,
-            x_m: row.x_m, // ★計算用に座標データも保持
+            x_m: row.x_m,
             y_m: row.y_m,
             z_m: row.z_m,
             c1_disparity: c1Disp,
             c2_disparity: c2Disp,
             c1_error: c1Error,
             c2_error: c2Error,
-            c1_visual_angle: c1R, // 右目を基準とする
+            c1_visual_angle: c1R,
             c2_visual_angle: c2R,
             distance: row.distance_m
           };
@@ -219,12 +302,11 @@ const DisparityAndAccuracyAnalysis = () => {
     };
     
     loadAndCalculate();
-  }, [selectedPitch, condition1, condition2]);
+  }, [selectedPitch, selectedCourse, batterHeight, condition1, condition2, heightError]);
 
   const currentDetail = data.length > 0 ? 
     (data[selectedTimeIdx] || data[data.length - 1]) : null;
 
-  // ★ 現在のスライダー位置に基づき成分分解を実行
   const c1Decomposition = (data.length > 0 && eyePositions) 
     ? decomposeTrajectory(data, selectedTimeIdx, eyePositions.c1.rightEye) 
     : null;
@@ -232,13 +314,6 @@ const DisparityAndAccuracyAnalysis = () => {
   const c2Decomposition = (data.length > 0 && eyePositions) 
     ? decomposeTrajectory(data, selectedTimeIdx, eyePositions.c2.rightEye) 
     : null;
-
-  const pitchNames = {
-    'ohtani_ff': 'Ohtani ストレート (FF)',
-    'ohtani_sweeper': 'Ohtani スイーパー (ST)',
-    'kershaw_curve': 'Kershaw カーブ (CU)',
-    'may_sinker': 'May シンカー (SI)'
-  };
 
   const getPhaseLabel = (timeMs) => {
     if (timeMs < 175) return '軌道予測フェーズ';
@@ -260,14 +335,16 @@ const DisparityAndAccuracyAnalysis = () => {
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = image;
-      link.download = `analysis_${selectedPitch}_${graphMode}.png`;
+      link.download = `analysis_${batterHeight}cm_${selectedCourse}_${selectedPitch}_${graphMode}.png`;
       link.click();
     } catch (error) {
       alert('画像の保存に失敗しました');
     }
   };
 
-  if (error) return <div className="p-6 text-red-600 font-bold">Error: {error}</div>;
+  // ========================================
+  // レンダリング
+  // ========================================
 
   const renderChart = () => {
     if (graphMode === 'disparity') {
@@ -311,7 +388,6 @@ const DisparityAndAccuracyAnalysis = () => {
           <Tooltip cursor={{strokeDasharray: '3 3'}} formatter={(val) => `${val.toFixed(2)}°`} labelFormatter={(label) => `${label.toFixed(0)} ms`} />
           <Legend verticalAlign="top" height={36}/>
           <ReferenceLine x={175} stroke="red" strokeDasharray="3 3" label="判断限界" />
-          {/* 現在のスライダー位置を示す線 */}
           <ReferenceLine x={currentDetail?.time_ms} stroke="green" strokeDasharray="3 3" />
           <Line type="monotone" dataKey="c1_visual_angle" name="Condition 1 (右目軌道)" stroke="#2563eb" strokeWidth={3} dot={false} />
           <Line type="monotone" dataKey="c2_visual_angle" name="Condition 2 (右目軌道)" stroke="#f97316" strokeWidth={3} dot={false} />
@@ -320,7 +396,6 @@ const DisparityAndAccuracyAnalysis = () => {
     }
   };
 
-  // ★ 分解結果の表示用コンポーネント
   const renderDecompositionStats = (result, colorClass, barColor) => {
     if (!result) return null;
     return (
@@ -330,7 +405,6 @@ const DisparityAndAccuracyAnalysis = () => {
            <span className="text-xl font-bold text-gray-800">{result.total.toFixed(2)}° <span className="text-xs font-normal text-gray-400">移動</span></span>
         </div>
         
-        {/* プログレスバー風の可視化 */}
         <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden flex mb-2">
           <div style={{ width: `${result.courseRatio}%` }} className={`h-full ${barColor} opacity-80`}></div>
           <div style={{ width: `${result.trajectoryRatio}%` }} className="h-full bg-gray-400 opacity-30"></div>
@@ -359,9 +433,65 @@ const DisparityAndAccuracyAnalysis = () => {
     );
   };
 
+  // ========================================
+  // コース選択グリッド（ストライクゾーン風）
+  // ========================================
+  const renderCourseGrid = () => {
+    const grid = [
+      ['high_in', 'high_mid', 'high_out'],
+      ['mid_in', 'mid_mid', 'mid_out'],
+      ['low_in', 'low_mid', 'low_out']
+    ];
+    
+    const getShortLabel = (course) => {
+      const labels = {
+        'high_in': 'イン\n高め',
+        'high_mid': '中\n高め',
+        'high_out': 'アウト\n高め',
+        'mid_in': 'イン\n中',
+        'mid_mid': '真ん中',
+        'mid_out': 'アウト\n中',
+        'low_in': 'イン\n低め',
+        'low_mid': '中\n低め',
+        'low_out': 'アウト\n低め'
+      };
+      return labels[course] || course;
+    };
+    
+    return (
+      <div className="bg-gradient-to-b from-green-800 to-green-900 p-3 rounded-xl shadow-inner">
+        <div className="grid grid-cols-3 gap-1">
+          {grid.map((row, rowIdx) => (
+            row.map((course, colIdx) => {
+              const isSelected = selectedCourse === course;
+              return (
+                <button
+                  key={course}
+                  onClick={() => setSelectedCourse(course)}
+                  className={`
+                    aspect-square rounded-lg text-xs font-bold transition-all duration-200
+                    flex items-center justify-center whitespace-pre-line text-center
+                    ${isSelected 
+                      ? 'bg-red-500 text-white shadow-lg scale-105 ring-2 ring-red-300' 
+                      : 'bg-white/90 text-gray-700 hover:bg-yellow-100 hover:scale-102'
+                    }
+                  `}
+                  style={{ minHeight: '52px' }}
+                >
+                  {getShortLabel(course)}
+                </button>
+              );
+            })
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto p-4 bg-gray-50 font-sans">
       <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        {/* ヘッダー */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-800 mb-2 md:mb-0 flex items-center gap-2">
             <BarChart2 className="w-8 h-8 text-indigo-600" />
@@ -372,58 +502,152 @@ const DisparityAndAccuracyAnalysis = () => {
           </button>
         </div>
 
-        {/* コントロールパネル (省略なし) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-          <div className="lg:col-span-12">
-            <div className="flex flex-wrap gap-2">
-              {Object.keys(pitchNames).map(key => (
-                <button
-                  key={key}
-                  onClick={() => { setSelectedPitch(key); setSelectedTimeIdx(Math.min(200, data.length - 1)); }}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                    selectedPitch === key ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-600'
+        {/* ========================================
+            ★ 新規追加: 投球設定パネル（バッター身長・コース・球種）
+            ======================================== */}
+        <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200 p-5 mb-6">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-emerald-600" />
+            投球設定
+          </h2>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* バッター身長 */}
+            <div className="lg:col-span-3">
+              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-500" />
+                バッター身長
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={HEIGHT_MIN}
+                  max={HEIGHT_MAX}
+                  value={batterHeightInput}
+                  onChange={handleHeightInputChange}
+                  onBlur={handleHeightBlur}
+                  className={`w-24 px-3 py-2 border rounded-lg text-center font-mono text-lg font-bold focus:ring-2 focus:outline-none ${
+                    heightError 
+                      ? 'border-red-400 focus:ring-red-500 focus:border-red-500 bg-red-50' 
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                   }`}
-                >
-                  {pitchNames[key]}
-                </button>
-              ))}
+                />
+                <span className="text-gray-600 font-medium">cm</span>
+              </div>
+              {heightError ? (
+                <p className="text-xs text-red-500 mt-1 font-medium">{heightError}</p>
+              ) : (
+                <div className="text-xs text-gray-400 mt-1">
+                  <p>{HEIGHT_MIN}〜{HEIGHT_MAX}cmの範囲</p>
+                  <p className="text-blue-500 font-medium">眼高: {(currentEyeHeight * 100).toFixed(1)}cm ({currentEyeHeight.toFixed(3)}m)</p>
+                </div>
+              )}
             </div>
-          </div>
-          <div className="lg:col-span-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <h3 className="font-bold text-blue-800 flex items-center gap-2 mb-3">
-              <span className="w-3 h-3 rounded-full bg-blue-600"></span> Condition 1 (基準)
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <select className="w-full p-2 rounded border border-blue-200 text-sm" value={condition1.stance} onChange={(e) => setCondition1({...condition1, stance: e.target.value})}>
-                {Object.keys(stanceAngles).map(k => <option key={k} value={k}>{stanceLabels[k]}</option>)}
-              </select>
-              <select className="w-full p-2 rounded border border-blue-200 text-sm" value={condition1.position} onChange={(e) => setCondition1({...condition1, position: e.target.value})}>
-                {Object.keys(boxPositions).map(k => <option key={k} value={k}>{positionLabels[k]}</option>)}
-              </select>
+
+            {/* コース選択（ストライクゾーン風グリッド） */}
+            <div className="lg:col-span-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                <Target className="w-4 h-4 text-red-500" />
+                コース: <span className="text-red-600">{courseOptions[selectedCourse].name}</span>
+              </label>
+              {renderCourseGrid()}
             </div>
-          </div>
-          <div className="lg:col-span-6 bg-orange-50 border border-orange-200 rounded-xl p-4">
-            <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-3">
-              <span className="w-3 h-3 rounded-full bg-orange-500"></span> Condition 2 (比較)
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <select className="w-full p-2 rounded border border-orange-200 text-sm" value={condition2.stance} onChange={(e) => setCondition2({...condition2, stance: e.target.value})}>
-                {Object.keys(stanceAngles).map(k => <option key={k} value={k}>{stanceLabels[k]}</option>)}
-              </select>
-              <select className="w-full p-2 rounded border border-orange-200 text-sm" value={condition2.position} onChange={(e) => setCondition2({...condition2, position: e.target.value})}>
-                {Object.keys(boxPositions).map(k => <option key={k} value={k}>{positionLabels[k]}</option>)}
-              </select>
+
+            {/* 球種選択 */}
+            <div className="lg:col-span-5">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                球種
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(pitchTypes).map(([key, pitch]) => (
+                  <button
+                    key={key}
+                    onClick={() => { setSelectedPitch(key); setSelectedTimeIdx(Math.min(200, data.length - 1)); }}
+                    className={`
+                      px-4 py-3 rounded-lg text-sm font-bold transition-all flex items-center gap-2
+                      ${selectedPitch === key 
+                        ? 'text-white shadow-lg scale-102' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }
+                    `}
+                    style={selectedPitch === key ? { backgroundColor: pitch.color } : {}}
+                  >
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: pitch.color }}></span>
+                    {pitch.name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Condition設定パネル */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 className="font-bold text-blue-800 flex items-center gap-2 mb-3">
+              <span className="w-3 h-3 rounded-full bg-blue-600"></span> Condition 1 (基準)
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-blue-600 mb-1">スタンス</label>
+                <select className="w-full p-2 rounded border border-blue-200 text-sm" value={condition1.stance} onChange={(e) => setCondition1({...condition1, stance: e.target.value})}>
+                  {Object.keys(stanceAngles).map(k => <option key={k} value={k}>{stanceLabels[k]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-blue-600 mb-1">打席位置</label>
+                <select className="w-full p-2 rounded border border-blue-200 text-sm" value={condition1.position} onChange={(e) => setCondition1({...condition1, position: e.target.value})}>
+                  {Object.keys(boxPositions).map(k => <option key={k} value={k}>{positionLabels[k]}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+            <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-3">
+              <span className="w-3 h-3 rounded-full bg-orange-500"></span> Condition 2 (比較)
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-orange-600 mb-1">スタンス</label>
+                <select className="w-full p-2 rounded border border-orange-200 text-sm" value={condition2.stance} onChange={(e) => setCondition2({...condition2, stance: e.target.value})}>
+                  {Object.keys(stanceAngles).map(k => <option key={k} value={k}>{stanceLabels[k]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-orange-600 mb-1">打席位置</label>
+                <select className="w-full p-2 rounded border border-orange-200 text-sm" value={condition2.position} onChange={(e) => setCondition2({...condition2, position: e.target.value})}>
+                  {Object.keys(boxPositions).map(k => <option key={k} value={k}>{positionLabels[k]}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* グラフ表示エリア */}
         <div ref={printRef} className="bg-white p-4 rounded-xl border border-transparent">
           <div className="mb-4 text-center border-b pb-2">
-             <h2 className="text-lg font-bold text-gray-700">{pitchNames[selectedPitch]} - 分析レポート</h2>
-             <p className="text-xs text-gray-500">Condition 1: {stanceLabels[condition1.stance]}/{positionLabels[condition1.position]} vs Condition 2: {stanceLabels[condition2.stance]}/{positionLabels[condition2.position]}</p>
+             <h2 className="text-lg font-bold text-gray-700">
+               {pitchTypes[selectedPitch].name} - {courseOptions[selectedCourse].name} (身長{batterHeight}cm)
+             </h2>
+             <p className="text-xs text-gray-500">
+               眼高: {(currentEyeHeight * 100).toFixed(1)}cm | 
+               Condition 1: {stanceLabels[condition1.stance]}/{positionLabels[condition1.position]} vs 
+               Condition 2: {stanceLabels[condition2.stance]}/{positionLabels[condition2.position]}
+             </p>
           </div>
 
-          {!loading && data.length > 0 && (
+          {/* エラー表示 */}
+          {error && (
+            <div className="p-6 bg-red-50 border border-red-200 rounded-xl mb-4">
+              <div className="text-red-600 font-bold mb-2">データ読み込みエラー</div>
+              <div className="text-red-500 text-sm">{error}</div>
+              <div className="text-gray-500 text-xs mt-2">
+                ファイルパス: ./public/{batterHeight}/{selectedCourse}/{selectedPitch}.csv
+              </div>
+            </div>
+          )}
+
+          {!error && !loading && data.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4 pb-4">
                 <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
@@ -447,7 +671,16 @@ const DisparityAndAccuracyAnalysis = () => {
             </div>
           )}
 
-          {!loading && currentDetail && (
+          {loading && !error && (
+            <div className="h-[400px] w-full flex items-center justify-center">
+              <div className="text-gray-500">
+                <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                データ読み込み中...
+              </div>
+            </div>
+          )}
+
+          {!error && !loading && currentDetail && (
             <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
                <div className="flex items-center justify-between mb-6">
                   <div>
@@ -484,7 +717,6 @@ const DisparityAndAccuracyAnalysis = () => {
                     <h4 className="font-bold text-gray-600">Condition 1 (基準)</h4>
                   </div>
                   
-                  {/* ★分岐：Trajectoryモードなら分解結果を表示、それ以外なら誤差/視差を表示 */}
                   {graphMode === 'trajectory' ? (
                      renderDecompositionStats(c1Decomposition, "text-blue-600", "bg-blue-600")
                   ) : (
@@ -501,7 +733,6 @@ const DisparityAndAccuracyAnalysis = () => {
                      <h4 className="font-bold text-gray-600">Condition 2 (比較)</h4>
                   </div>
 
-                  {/* ★分岐：Trajectoryモードなら分解結果を表示 */}
                   {graphMode === 'trajectory' ? (
                      renderDecompositionStats(c2Decomposition, "text-orange-600", "bg-orange-500")
                   ) : (
