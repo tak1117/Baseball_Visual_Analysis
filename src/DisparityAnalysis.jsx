@@ -91,7 +91,7 @@ const DisparityAndAccuracyAnalysis = () => {
   };
 
   const getCSVPath = (height, course, pitch) => {
-    return `./public/${height}/${course}/${pitch}.csv`;
+    return `/${height}/${course}/${pitch}.csv`;
   };
 
   const loadCSV = async (filepath) => {
