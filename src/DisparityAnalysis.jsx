@@ -1,25 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import { Activity, TrendingUp, Eye, AlertTriangle, BarChart2, Camera, MousePointer2, ArrowRightLeft, ArrowUpCircle, User, Target } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 const DisparityAndAccuracyAnalysis = () => {
-  // ========================================
-  // 基本設定
-  // ========================================
   const [selectedPitch, setSelectedPitch] = useState('FF');
   const [selectedTimeIdx, setSelectedTimeIdx] = useState(200);
   
-  // ★ 新規追加: バッター身長とコース選択
   const [batterHeight, setBatterHeight] = useState(170);
   const [batterHeightInput, setBatterHeightInput] = useState('170');
   const [heightError, setHeightError] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState('mid_mid');
   
-  // グラフモード
   const [graphMode, setGraphMode] = useState('disparity');
   
-  // 条件設定
   const [condition1, setCondition1] = useState({ stance: 'open', position: 'inner' });
   const [condition2, setCondition2] = useState({ stance: 'square', position: 'inner' });
 
@@ -30,15 +24,17 @@ const DisparityAndAccuracyAnalysis = () => {
 
   const printRef = useRef(null);
 
-  // ========================================
-  // 定数定義
-  // ========================================
-  
-  // 身長の有効範囲
   const HEIGHT_MIN = 160;
   const HEIGHT_MAX = 200;
   
-  // 球種定義（ファイル名と表示名）
+  const PHASE_TIMING = {
+    RELEASE: 0,
+    PERCEPTION_END: 150,
+    SWING_START_MIN: 190,
+    SWING_START_MAX: 290,
+    BALL_ARRIVAL: 440
+  };
+  
   const pitchTypes = {
     'FF': { name: 'ストレート (FF)', fullName: 'Straight', color: '#E63946' },
     'ST': { name: 'スイーパー (ST)', fullName: 'Sweeper', color: '#457B9D' },
@@ -46,7 +42,6 @@ const DisparityAndAccuracyAnalysis = () => {
     'SI': { name: 'シンカー (SI)', fullName: 'Sinker', color: '#2A9D8F' }
   };
 
-  // コース定義（ディレクトリ名と表示名）
   const courseOptions = {
     'high_in': { name: 'インコース高め', row: 0, col: 0 },
     'high_mid': { name: '真ん中高め', row: 0, col: 1 },
@@ -62,19 +57,14 @@ const DisparityAndAccuracyAnalysis = () => {
   const STEREO_ACUITY_ARCSEC = 100; 
   const STEREO_ACUITY_RAD = (STEREO_ACUITY_ARCSEC / 3600) * (Math.PI / 180);
 
-  // 眼高計算の係数（AIST人体寸法データベースに基づく）
-  // 日本人成人男性: 平均身長171.4cm, 平均内眼角高159.6cm
   const EYE_HEIGHT_RATIO = 159.6 / 171.4;
 
-  // 眼高を身長から動的に計算する関数
   const calculateEyeHeight = (heightCm) => {
-    return (heightCm * EYE_HEIGHT_RATIO) / 100; // cm → m に変換
+    return (heightCm * EYE_HEIGHT_RATIO) / 100;
   };
 
-  // 現在の身長に基づく眼高
   const currentEyeHeight = calculateEyeHeight(batterHeight);
 
-  // 打席位置（眼高は動的に計算）
   const getBoxPositions = (eyeHeight) => ({
     'inner': [-0.45, 0.0, eyeHeight],
     'middle': [-0.90, 0.0, eyeHeight]
@@ -85,12 +75,21 @@ const DisparityAndAccuracyAnalysis = () => {
   const stanceAngles = { 'open': 0, 'square': -30 };
   const stanceLabels = { 'open': 'Open', 'square': 'Square' };
 
-  const timeTicks = [0, 100, 200, 300, 400, 500, 600];
+  const timeTicks = [0, 100, 200, 300, 400];
   const errorTicks = [0, 500, 1000, 1500, 2000, 2500, 3000];
 
-  // ========================================
-  // CSVファイルパス生成
-  // ========================================
+  // 軸ラベルの共通スタイル
+  const axisLabelStyle = {
+    fontSize: 13,
+    fontWeight: 600,
+    fill: '#374151'
+  };
+
+  const axisTick = {
+    fontSize: 11,
+    fill: '#6b7280'
+  };
+
   const getCSVPath = (height, course, pitch) => {
     return `./public/${height}/${course}/${pitch}.csv`;
   };
@@ -117,7 +116,6 @@ const DisparityAndAccuracyAnalysis = () => {
     }
   };
 
-  // ベクトル演算ヘルパー
   const subVec = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
   const normVec = (v) => Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
   const normalize = (v) => { const n = normVec(v); return [v[0]/n, v[1]/n, v[2]/n]; };
@@ -128,7 +126,6 @@ const DisparityAndAccuracyAnalysis = () => {
     a[0]*b[1] - a[1]*b[0]
   ];
 
-  // 視点計算
   const calculateEyePositions = (yawDeg, headCenter) => {
     const rad = (yawDeg * Math.PI) / 180;
     const halfIPD = 0.031;
@@ -139,7 +136,6 @@ const DisparityAndAccuracyAnalysis = () => {
     };
   };
 
-  // 通常の視角計算（グラフ描画用）
   const calculateVisualAngle = (eyePos, ballPos) => {
     const targetPos = [0.0, 18.44, 1.80];
     const camFwd = normalize(subVec(targetPos, eyePos));
@@ -154,7 +150,6 @@ const DisparityAndAccuracyAnalysis = () => {
     return Math.atan2(xLocal, zLocal) * 180 / Math.PI;
   };
 
-  // コース変化と球筋（Trajectory Effect）の分解ロジック
   const decomposeTrajectory = (fullData, currentIndex, eyePos) => {
     if (!fullData || fullData.length < 2 || currentIndex < 1) return null;
 
@@ -196,14 +191,10 @@ const DisparityAndAccuracyAnalysis = () => {
     };
   };
 
-  // ========================================
-  // 身長入力のバリデーション
-  // ========================================
   const handleHeightInputChange = (e) => {
     const inputValue = e.target.value;
     setBatterHeightInput(inputValue);
     
-    // 空の場合はエラーを表示しない（入力中）
     if (inputValue === '') {
       setHeightError(null);
       return;
@@ -222,19 +213,14 @@ const DisparityAndAccuracyAnalysis = () => {
   };
 
   const handleHeightBlur = () => {
-    // フォーカスが外れたときに有効な値に戻す
     if (heightError || batterHeightInput === '') {
       setBatterHeightInput(batterHeight.toString());
       setHeightError(null);
     }
   };
 
-  // ========================================
-  // データ読み込み・計算
-  // ========================================
   useEffect(() => {
     const loadAndCalculate = async () => {
-      // 身長エラーがある場合は読み込まない
       if (heightError) return;
       
       setLoading(true);
@@ -316,9 +302,29 @@ const DisparityAndAccuracyAnalysis = () => {
     : null;
 
   const getPhaseLabel = (timeMs) => {
-    if (timeMs < 175) return '軌道予測フェーズ';
-    if (timeMs < 225) return '最終判断フェーズ';
-    return 'スイング動作中';
+    if (timeMs < PHASE_TIMING.PERCEPTION_END) {
+      return '視覚情報処理・タイミング知覚';
+    }
+    if (timeMs < PHASE_TIMING.SWING_START_MIN) {
+      return '判断完了・スイング準備';
+    }
+    if (timeMs < PHASE_TIMING.SWING_START_MAX) {
+      return 'スイング開始可能区間';
+    }
+    return '運動調整・スイング実行';
+  };
+
+  const getPhaseStyle = (timeMs) => {
+    if (timeMs < PHASE_TIMING.PERCEPTION_END) {
+      return 'bg-blue-100 text-blue-800';
+    }
+    if (timeMs < PHASE_TIMING.SWING_START_MIN) {
+      return 'bg-cyan-100 text-cyan-800';
+    }
+    if (timeMs < PHASE_TIMING.SWING_START_MAX) {
+      return 'bg-yellow-100 text-yellow-800';
+    }
+    return 'bg-red-100 text-red-800';
   };
 
   const getTickPosition = (timeMs) => {
@@ -331,66 +337,137 @@ const DisparityAndAccuracyAnalysis = () => {
   const handleSaveImage = async () => {
     if (!printRef.current) return;
     try {
-      const canvas = await html2canvas(printRef.current, { backgroundColor: '#ffffff', scale: 2 });
-      const image = canvas.toDataURL('image/png');
+      const dataUrl = await toPng(printRef.current, {
+        quality: 1.0,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+      });
       const link = document.createElement('a');
-      link.href = image;
+      link.href = dataUrl;
       link.download = `analysis_${batterHeight}cm_${selectedCourse}_${selectedPitch}_${graphMode}.png`;
       link.click();
     } catch (error) {
+      console.error('画像保存エラー:', error);
       alert('画像の保存に失敗しました');
     }
   };
 
-  // ========================================
-  // レンダリング
-  // ========================================
-
   const renderChart = () => {
+    // 緑色のタイムライン位置線のみ残す
+    const timelineReferenceLine = (
+      <ReferenceLine x={currentDetail?.time_ms} stroke="#22c55e" strokeDasharray="3 3" strokeWidth={2} />
+    );
+
     if (graphMode === 'disparity') {
       return (
-        <LineChart data={data} margin={{ top: 20, right: 20, bottom: 25, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="time_ms" ticks={timeTicks} type="number" domain={[0, 400]} label={{ value: '経過時間 (ms)', position: 'insideBottom', offset: -15 }} />
-          <YAxis label={{ value: '視差 (度)', angle: -90, position: 'insideLeft' }} />
-          <Tooltip formatter={(val) => `${val.toFixed(4)}°`} labelFormatter={(label) => `${label.toFixed(0)} ms`} />
-          <Legend verticalAlign="top" height={36}/>
-          <ReferenceLine x={175} stroke="red" strokeDasharray="3 3" label="判断限界" />
-          <Line type="monotone" dataKey="c1_disparity" name="Condition 1 (視差)" stroke="#2563eb" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="c2_disparity" name="Condition 2 (視差)" stroke="#f97316" strokeWidth={3} dot={false} />
+        <LineChart data={data} margin={{ top: 25, right: 30, bottom: 50, left: 70 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+          <XAxis 
+            dataKey="time_ms" 
+            ticks={timeTicks} 
+            type="number" 
+            domain={[0, 400]}
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+          >
+            <Label value="経過時間 (ms)" position="bottom" offset={30} style={axisLabelStyle} />
+          </XAxis>
+          <YAxis 
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+            tickFormatter={(val) => val.toFixed(2)}
+          >
+            <Label value="両眼視差 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+          </YAxis>
+          <Tooltip 
+            formatter={(val) => `${val.toFixed(4)}°`} 
+            labelFormatter={(label) => `${label.toFixed(0)} ms`}
+            contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+          />
+          <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
+          {timelineReferenceLine}
+          <Line type="monotone" dataKey="c1_disparity" name="Condition 1" stroke="#2563eb" strokeWidth={3} dot={false} />
+          <Line type="monotone" dataKey="c2_disparity" name="Condition 2" stroke="#f97316" strokeWidth={3} dot={false} />
         </LineChart>
       );
     }
     if (graphMode === 'accuracy') {
       return (
-        <AreaChart data={data} margin={{ top: 20, right: 20, bottom: 25, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 25, right: 30, bottom: 50, left: 70 }}>
           <defs>
             <linearGradient id="colorC1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2563eb" stopOpacity={0.1}/><stop offset="95%" stopColor="#2563eb" stopOpacity={0}/></linearGradient>
             <linearGradient id="colorC2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f97316" stopOpacity={0.1}/><stop offset="95%" stopColor="#f97316" stopOpacity={0}/></linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="time_ms" ticks={timeTicks} type="number" domain={[0, 400]} label={{ value: '経過時間 (ms)', position: 'insideBottom', offset: -15 }} />
-          <YAxis label={{ value: '誤差範囲 (±cm)', angle: -90, position: 'insideLeft' }} domain={[0, 3000]} ticks={errorTicks} />
-          <Tooltip formatter={(val) => `±${val.toFixed(1)} cm`} labelFormatter={(label) => `${label.toFixed(0)} ms`} />
-          <Legend verticalAlign="top" height={36}/>
-          <ReferenceLine x={175} stroke="red" strokeDasharray="3 3" label="判断限界" />
-          <Area type="monotone" dataKey="c1_error" name="Condition 1 (誤差)" stroke="#2563eb" fill="url(#colorC1)" strokeWidth={2} />
-          <Area type="monotone" dataKey="c2_error" name="Condition 2 (誤差)" stroke="#f97316" fill="url(#colorC2)" strokeWidth={2} />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+          <XAxis 
+            dataKey="time_ms" 
+            ticks={timeTicks} 
+            type="number" 
+            domain={[0, 400]}
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+          >
+            <Label value="経過時間 (ms)" position="bottom" offset={30} style={axisLabelStyle} />
+          </XAxis>
+          <YAxis 
+            domain={[0, 3000]} 
+            ticks={errorTicks}
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+          >
+            <Label value="認識誤差 (±cm)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+          </YAxis>
+          <Tooltip 
+            formatter={(val) => `±${val.toFixed(1)} cm`} 
+            labelFormatter={(label) => `${label.toFixed(0)} ms`}
+            contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+          />
+          <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
+          {timelineReferenceLine}
+          <Area type="monotone" dataKey="c1_error" name="Condition 1" stroke="#2563eb" fill="url(#colorC1)" strokeWidth={2} />
+          <Area type="monotone" dataKey="c2_error" name="Condition 2" stroke="#f97316" fill="url(#colorC2)" strokeWidth={2} />
         </AreaChart>
       );
     }
     if (graphMode === 'trajectory') {
       return (
-        <LineChart data={data} margin={{ top: 20, right: 20, bottom: 25, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="time_ms" type="number" ticks={timeTicks} domain={[0, 400]} label={{ value: '経過時間 (ms)', position: 'insideBottom', offset: -15 }} />
-          <YAxis type="number" domain={['auto', 'auto']} label={{ value: '水平視角 (度)', angle: -90, position: 'insideLeft' }} />
-          <Tooltip cursor={{strokeDasharray: '3 3'}} formatter={(val) => `${val.toFixed(2)}°`} labelFormatter={(label) => `${label.toFixed(0)} ms`} />
-          <Legend verticalAlign="top" height={36}/>
-          <ReferenceLine x={175} stroke="red" strokeDasharray="3 3" label="判断限界" />
-          <ReferenceLine x={currentDetail?.time_ms} stroke="green" strokeDasharray="3 3" />
-          <Line type="monotone" dataKey="c1_visual_angle" name="Condition 1 (右目軌道)" stroke="#2563eb" strokeWidth={3} dot={false} />
-          <Line type="monotone" dataKey="c2_visual_angle" name="Condition 2 (右目軌道)" stroke="#f97316" strokeWidth={3} dot={false} />
+        <LineChart data={data} margin={{ top: 25, right: 30, bottom: 50, left: 70 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+          <XAxis 
+            dataKey="time_ms" 
+            type="number" 
+            ticks={timeTicks} 
+            domain={[0, 400]}
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+          >
+            <Label value="経過時間 (ms)" position="bottom" offset={30} style={axisLabelStyle} />
+          </XAxis>
+          <YAxis 
+            type="number" 
+            domain={['auto', 'auto']}
+            tick={axisTick}
+            tickLine={{ stroke: '#9ca3af' }}
+            axisLine={{ stroke: '#9ca3af' }}
+            tickFormatter={(val) => val.toFixed(1)}
+          >
+            <Label value="水平視角 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+          </YAxis>
+          <Tooltip 
+            cursor={{strokeDasharray: '3 3'}} 
+            formatter={(val) => `${val.toFixed(2)}°`} 
+            labelFormatter={(label) => `${label.toFixed(0)} ms`}
+            contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+          />
+          <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
+          {timelineReferenceLine}
+          <Line type="monotone" dataKey="c1_visual_angle" name="Condition 1" stroke="#2563eb" strokeWidth={3} dot={false} />
+          <Line type="monotone" dataKey="c2_visual_angle" name="Condition 2" stroke="#f97316" strokeWidth={3} dot={false} />
         </LineChart>
       );
     }
@@ -433,9 +510,6 @@ const DisparityAndAccuracyAnalysis = () => {
     );
   };
 
-  // ========================================
-  // コース選択グリッド（ストライクゾーン風）
-  // ========================================
   const renderCourseGrid = () => {
     const grid = [
       ['high_in', 'high_mid', 'high_out'],
@@ -491,7 +565,6 @@ const DisparityAndAccuracyAnalysis = () => {
   return (
     <div className="w-full max-w-7xl mx-auto p-4 bg-gray-50 font-sans">
       <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-        {/* ヘッダー */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <h1 className="text-2xl font-bold text-slate-800 mb-2 md:mb-0 flex items-center gap-2">
             <BarChart2 className="w-8 h-8 text-indigo-600" />
@@ -502,9 +575,6 @@ const DisparityAndAccuracyAnalysis = () => {
           </button>
         </div>
 
-        {/* ========================================
-            ★ 新規追加: 投球設定パネル（バッター身長・コース・球種）
-            ======================================== */}
         <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200 p-5 mb-6">
           <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
             <Target className="w-5 h-5 text-emerald-600" />
@@ -512,7 +582,6 @@ const DisparityAndAccuracyAnalysis = () => {
           </h2>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* バッター身長 */}
             <div className="lg:col-span-3">
               <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 <User className="w-4 h-4 text-blue-500" />
@@ -544,7 +613,6 @@ const DisparityAndAccuracyAnalysis = () => {
               )}
             </div>
 
-            {/* コース選択（ストライクゾーン風グリッド） */}
             <div className="lg:col-span-4">
               <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 <Target className="w-4 h-4 text-red-500" />
@@ -553,7 +621,6 @@ const DisparityAndAccuracyAnalysis = () => {
               {renderCourseGrid()}
             </div>
 
-            {/* 球種選択 */}
             <div className="lg:col-span-5">
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 球種
@@ -581,7 +648,6 @@ const DisparityAndAccuracyAnalysis = () => {
           </div>
         </div>
 
-        {/* Condition設定パネル */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <h3 className="font-bold text-blue-800 flex items-center gap-2 mb-3">
@@ -623,20 +689,17 @@ const DisparityAndAccuracyAnalysis = () => {
           </div>
         </div>
 
-        {/* グラフ表示エリア */}
         <div ref={printRef} className="bg-white p-4 rounded-xl border border-transparent">
           <div className="mb-4 text-center border-b pb-2">
              <h2 className="text-lg font-bold text-gray-700">
                {pitchTypes[selectedPitch].name} - {courseOptions[selectedCourse].name} (身長{batterHeight}cm)
              </h2>
              <p className="text-xs text-gray-500">
-               眼高: {(currentEyeHeight * 100).toFixed(1)}cm | 
                Condition 1: {stanceLabels[condition1.stance]}/{positionLabels[condition1.position]} vs 
                Condition 2: {stanceLabels[condition2.stance]}/{positionLabels[condition2.position]}
              </p>
           </div>
 
-          {/* エラー表示 */}
           {error && (
             <div className="p-6 bg-red-50 border border-red-200 rounded-xl mb-4">
               <div className="text-red-600 font-bold mb-2">データ読み込みエラー</div>
@@ -663,7 +726,7 @@ const DisparityAndAccuracyAnalysis = () => {
                 </div>
               </div>
               
-              <div className="h-[400px] w-full">
+              <div className="h-[450px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   {renderChart()}
                 </ResponsiveContainer>
@@ -672,7 +735,7 @@ const DisparityAndAccuracyAnalysis = () => {
           )}
 
           {loading && !error && (
-            <div className="h-[400px] w-full flex items-center justify-center">
+            <div className="h-[450px] w-full flex items-center justify-center">
               <div className="text-gray-500">
                 <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-2"></div>
                 データ読み込み中...
@@ -684,12 +747,10 @@ const DisparityAndAccuracyAnalysis = () => {
             <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
                <div className="flex items-center justify-between mb-6">
                   <div>
-                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-2 ${
-                        currentDetail.time_ms < 175 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                     }`}>
+                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-2 ${getPhaseStyle(currentDetail.time_ms)}`}>
                         {getPhaseLabel(currentDetail.time_ms)} ({currentDetail.time_ms.toFixed(0)}ms時点)
                      </span>
-                     <p className="text-sm text-gray-500">ボール距離: {currentDetail.distance.toFixed(2)}m</p>
+                     <p className="text-sm text-gray-500 mt-2">ボール距離: {currentDetail.distance.toFixed(2)}m</p>
                   </div>
                </div>
 
@@ -697,21 +758,23 @@ const DisparityAndAccuracyAnalysis = () => {
                 <div className="flex justify-between items-end mb-2">
                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                      <MousePointer2 className="w-4 h-4"/> 
-                     {graphMode === 'trajectory' ? '分析対象の終点（スライダーで調整）' : 'タイムライン位置'}
+                     タイムライン位置
                    </label>
                    <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">Frame: {selectedTimeIdx}</span>
                 </div>
                 <input type="range" min="0" max={data.length - 1} value={selectedTimeIdx} onChange={(e) => setSelectedTimeIdx(Number(e.target.value))} className="w-full h-6 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 relative z-10" />
                 <div className="relative w-full h-6 mt-2 text-xs text-gray-500 font-medium">
                   <div className="absolute transform -translate-x-0" style={{left: '0%'}}>0ms</div>
-                  {data.length > 0 && data[data.length-1].time_ms > 200 && (
-                     <div className="absolute transform -translate-x-1/2 text-center text-red-600 font-bold" style={{left: `${getTickPosition(200)}%`}}>200ms</div>
+                  {data.length > 0 && data[data.length-1].time_ms > PHASE_TIMING.PERCEPTION_END && (
+                     <div className="absolute transform -translate-x-1/2 text-center text-blue-600 font-bold" style={{left: `${getTickPosition(PHASE_TIMING.PERCEPTION_END)}%`}}>150ms</div>
+                  )}
+                  {data.length > 0 && data[data.length-1].time_ms > PHASE_TIMING.SWING_START_MAX && (
+                     <div className="absolute transform -translate-x-1/2 text-center text-red-600 font-bold" style={{left: `${getTickPosition(PHASE_TIMING.SWING_START_MAX)}%`}}>290ms</div>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-                {/* Condition 1 詳細カード */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-blue-500">
                   <div className="flex justify-between items-start mb-4">
                     <h4 className="font-bold text-gray-600">Condition 1 (基準)</h4>
@@ -727,7 +790,6 @@ const DisparityAndAccuracyAnalysis = () => {
                   )}
                 </div>
 
-                {/* Condition 2 詳細カード */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-orange-500">
                   <div className="flex justify-between items-start mb-4">
                      <h4 className="font-bold text-gray-600">Condition 2 (比較)</h4>
