@@ -378,7 +378,7 @@
 //             axisLine={{ stroke: '#9ca3af' }}
 //             tickFormatter={(val) => val.toFixed(2)}
 //           >
-//             <Label value="両眼視差 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+//             <Label value="両眼視差 (°)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
 //           </YAxis>
 //           <Tooltip 
 //             formatter={(val) => `${val.toFixed(4)}°`} 
@@ -455,7 +455,7 @@
 //             axisLine={{ stroke: '#9ca3af' }}
 //             tickFormatter={(val) => val.toFixed(1)}
 //           >
-//             <Label value="水平視角 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+//             <Label value="水平視角 (°)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
 //           </YAxis>
 //           <Tooltip 
 //             cursor={{strokeDasharray: '3 3'}} 
@@ -905,13 +905,13 @@ const DisparityAndAccuracyAnalysis = () => {
 
   // 軸ラベルの共通スタイル
   const axisLabelStyle = {
-    fontSize: 13,
+    fontSize: 18,
     fontWeight: 600,
     fill: '#374151'
   };
 
   const axisTick = {
-    fontSize: 11,
+    fontSize: 18,
     fill: '#6b7280'
   };
 
@@ -1222,7 +1222,7 @@ const DisparityAndAccuracyAnalysis = () => {
             axisLine={{ stroke: '#9ca3af' }}
             tickFormatter={(val) => val.toFixed(2)}
           >
-            <Label value="両眼視差 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+            <Label value="両眼視差 (°)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
           </YAxis>
           <Tooltip 
             formatter={(val) => `${val.toFixed(4)}°`} 
@@ -1230,7 +1230,7 @@ const DisparityAndAccuracyAnalysis = () => {
             contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
           />
           <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
-          {timelineReferenceLine}
+          {/* {timelineReferenceLine} */}
           <Line type="monotone" dataKey="c1_disparity" name="Condition 1" stroke="#2563eb" strokeWidth={3} dot={false} />
           <Line type="monotone" dataKey="c2_disparity" name="Condition 2" stroke="#f97316" strokeWidth={3} dot={false} />
         </LineChart>
@@ -1270,7 +1270,7 @@ const DisparityAndAccuracyAnalysis = () => {
             contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
           />
           <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
-          {timelineReferenceLine}
+          {/* {timelineReferenceLine} */}
           <Area type="monotone" dataKey="c1_error" name="Condition 1" stroke="#2563eb" fill="url(#colorC1)" strokeWidth={2} />
           <Area type="monotone" dataKey="c2_error" name="Condition 2" stroke="#f97316" fill="url(#colorC2)" strokeWidth={2} />
         </AreaChart>
@@ -1299,7 +1299,7 @@ const DisparityAndAccuracyAnalysis = () => {
             axisLine={{ stroke: '#9ca3af' }}
             tickFormatter={(val) => val.toFixed(1)}
           >
-            <Label value="水平視角 (deg)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
+            <Label value="水平視角 (°)" position="left" angle={-90} offset={15} style={{ ...axisLabelStyle, textAnchor: 'middle' }} dy={-10} />
           </YAxis>
           <Tooltip 
             cursor={{strokeDasharray: '3 3'}} 
@@ -1308,7 +1308,7 @@ const DisparityAndAccuracyAnalysis = () => {
             contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
           />
           <Legend verticalAlign="top" height={36} wrapperStyle={{ paddingBottom: '10px' }} />
-          {timelineReferenceLine}
+          {/* {timelineReferenceLine} */}
           <Line type="monotone" dataKey="c1_visual_angle" name="Condition 1" stroke="#2563eb" strokeWidth={3} dot={false} />
           <Line type="monotone" dataKey="c2_visual_angle" name="Condition 2" stroke="#f97316" strokeWidth={3} dot={false} />
         </LineChart>
@@ -1322,7 +1322,7 @@ const DisparityAndAccuracyAnalysis = () => {
       <div className="mt-2">
         <div className="flex justify-between items-end mb-2">
            <span className="text-xs text-gray-500 font-bold">視覚移動の内訳 (0ms → 現在)</span>
-           <span className="text-xl font-bold text-gray-800">{result.total.toFixed(2)}° <span className="text-xs font-normal text-gray-400">移動</span></span>
+           <span className="text-3xl font-bold text-gray-800">{result.total.toFixed(2)}° <span className="text-xs font-normal text-gray-400">移動</span></span>
         </div>
         
         <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden flex mb-2">
@@ -1332,23 +1332,23 @@ const DisparityAndAccuracyAnalysis = () => {
 
         <div className="grid grid-cols-2 gap-2 text-sm">
            <div className="bg-gray-50 p-2 rounded border border-gray-100">
-              <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                 <ArrowRightLeft size={12} /> コース変化
+              <div className="flex items-center gap-1 text-xm text-gray-500 mb-1">
+                 <ArrowRightLeft size={15} /> コース変化
               </div>
-              <div className={`font-bold ${colorClass}`}>
+              <div className={`text-2xl font-bold ${colorClass}` }>
                  {result.courseRatio.toFixed(1)}% <span className="text-xs text-gray-400">({result.course.toFixed(2)}°)</span>
               </div>
            </div>
            <div className="bg-gray-50 p-2 rounded border border-gray-100">
-              <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                 <ArrowUpCircle size={12} /> 球筋効果(奥行)
+              <div className="flex items-center gap-1 text-xm text-gray-500 mb-1">
+                 <ArrowUpCircle size={15} /> 球筋効果(奥行)
               </div>
-              <div className="font-bold text-gray-600">
+              <div className="text-2xl font-bold text-gray-600">
                  {result.trajectoryRatio.toFixed(1)}% <span className="text-xs text-gray-400">({result.trajectory.toFixed(2)}°)</span>
               </div>
            </div>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1 text-right">※Y座標固定時のX移動 vs 奥行移動</p>
+        {/* <p className="text-[10px] text-gray-400 mt-1 text-right">※Y座標固定時のX移動 vs 奥行移動</p> */}
       </div>
     );
   };
@@ -1627,8 +1627,8 @@ const DisparityAndAccuracyAnalysis = () => {
                      renderDecompositionStats(c1Decomposition, "text-blue-600", "bg-blue-600")
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
-                      <div><p className="text-xs text-gray-400 mb-1">両眼視差</p><p className="text-2xl font-bold text-slate-800">{currentDetail.c1_disparity.toFixed(4)}°</p></div>
-                      <div><p className="text-xs text-gray-400 mb-1">認識誤差</p><p className="text-2xl font-bold text-blue-600">±{currentDetail.c1_error.toFixed(1)} cm</p></div>
+                      <div><p className="text-sm text-black-400 mb-1">両眼視差</p><p className="text-3xl font-bold text-slate-800">{currentDetail.c1_disparity.toFixed(4)}°</p></div>
+                      <div><p className="text-sm text-black-400 mb-1">認識誤差</p><p className="text-3xl font-bold text-blue-600">±{currentDetail.c1_error.toFixed(1)} cm</p></div>
                     </div>
                   )}
                 </div>
@@ -1643,10 +1643,10 @@ const DisparityAndAccuracyAnalysis = () => {
                   ) : (
                     <>
                       <div className="grid grid-cols-2 gap-4">
-                        <div><p className="text-xs text-gray-400 mb-1">両眼視差</p><p className="text-2xl font-bold text-slate-800">{currentDetail.c2_disparity.toFixed(4)}°</p></div>
-                        <div><p className="text-xs text-gray-400 mb-1">認識誤差</p><p className="text-2xl font-bold text-orange-600">±{currentDetail.c2_error.toFixed(1)} cm</p></div>
+                        <div><p className="text-sm text-black-400 mb-1">両眼視差</p><p className="text-3xl font-bold text-slate-800">{currentDetail.c2_disparity.toFixed(4)}°</p></div>
+                        <div><p className="text-sm text-black-400 mb-1">認識誤差</p><p className="text-3xl font-bold text-orange-600">±{currentDetail.c2_error.toFixed(1)} cm</p></div>
                       </div>
-                      <div className="mt-4 pt-4 border-t border-gray-100 text-sm">
+                      <div className="mt-4 pt-4 border-t border-gray-100 text-lg">
                         {currentDetail.c2_error > currentDetail.c1_error ? (
                           <div className="flex items-center text-red-600 font-bold"><TrendingUp className="w-4 h-4 mr-2" />誤差 {((currentDetail.c2_error / currentDetail.c1_error - 1) * 100).toFixed(1)}% 拡大</div>
                         ) : (
